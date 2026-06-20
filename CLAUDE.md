@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Jarvis is Bassam's personal learning project: a personal AI assistant built incrementally across 6 milestones (text chat -> voice -> persistent memory -> vision -> PC control -> local LLM). The point of the project is for Bassam to grow as a Python developer, not to ship Jarvis quickly.
 
-Currently mid-Milestone 1 (terminal text chat with Claude, same-session conversation memory, personality, key stored in `.env`).
+Milestone 1 (terminal text chat with Claude, same-session conversation memory, personality, key stored in `.env`) is functionally complete. Next up is Milestone 2 (voice).
 
 ## Operating mode for this repo: teach, don't build
 
@@ -22,7 +22,7 @@ Bassam is an intermediate Python developer and wants a mentor, not a developer w
 
 - Python 3.13, installed at `C:\Users\kitan\AppData\Local\Programs\Python\Python313\python.exe`.
 - No virtual environment yet — `anthropic` and `python-dotenv` are installed globally. This is a known, accepted tradeoff for now (single solo learning project), not an oversight.
-- Secrets live in `.env` (currently holds `ANTHROPIC_API_KEY`). `.env` is not yet covered by a `.gitignore` — if git is initialized in this repo, add `.env` to `.gitignore` before the first commit.
+- Secrets live in `.env` (currently holds `ANTHROPIC_API_KEY`). `.gitignore` covers `.env`, `__pycache__/`, `*.pyc`, and `.vscode/`.
 - Run any script directly, e.g.:
   ```
   python Jarvis_Talking.py
@@ -31,4 +31,5 @@ Bassam is an intermediate Python developer and wants a mentor, not a developer w
 ## Code in this repo
 
 - `Memory_Test.py` — isolated scratch exercise (not part of the final app) proving out the core "memory" concept: a list of `{"role": ..., "content": ...}` dicts that grows each loop iteration. Keep this concept in mind when reading or extending the real chat loop, since Claude's API is stateless and relies entirely on resending this list each call.
-- `Jarvis_Talking.py` — the real entry point in progress. Currently: loads `.env`, builds an `anthropic.Anthropic` client, and makes a single hardcoded test API call. Not yet wired into a `while True` input loop or the real conversation-history list — that wiring is the next step toward finishing Milestone 1.
+- `Jarvis_Talking.py` — the real entry point. `main()` runs a `while True` chat loop: takes terminal input, appends a user dict to `history`, calls `get_jarvis_response(history)`, appends the returned reply as an assistant dict, and prints it. `get_jarvis_response` loads `.env`, builds the `anthropic.Anthropic` client, reads `jarvis_personality.txt` into a `system` prompt, and calls `client.messages.create(...)` with `messages=history`, returning just the reply text (`response.content[0].text`).
+- `jarvis_personality.txt` — plain-text system prompt defining Jarvis's identity, tone, and hard constraints (no emojis, respect the hierarchy with Bassam, etc.). Read fresh on every call inside `get_jarvis_response` — known minor inefficiency, not yet worth fixing.
