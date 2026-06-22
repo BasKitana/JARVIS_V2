@@ -1,7 +1,9 @@
 from dotenv import load_dotenv
 import os
 import anthropic
+import win32com.client
 def main():
+    voice = win32com.client.Dispatch("SAPI.SpVoice")
     history = []
     while True:
       user_input = input("Chat:   ")
@@ -11,7 +13,7 @@ def main():
       jarvis_info = {"role": "assistant", "content": response}
       history.append(jarvis_info)
       print(response)
-
+      voice.Speak(response)
 
 """
 Args: takes in history as what user types in input  
