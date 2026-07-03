@@ -5,6 +5,7 @@ import anthropic
 import win32com.client
 import speech_recognition as sr
 import whisper
+import Jarvis_Memory
 
 def main():
     recognizer = sr.Recognizer()
@@ -17,7 +18,7 @@ def main():
       print("Threshold after:", recognizer.energy_threshold)
     recognizer.dynamic_energy_threshold = False
     recognizer.energy_threshold += 50
-    history = []
+    history = Jarvis_Memory.read_to_memory()
     while True:
       user_input = listener(recognizer, mic, whisper_model)
       if user_input.strip() == "":
@@ -33,12 +34,13 @@ def main():
        speak_start = time.time()
        voice.Speak(response)
        print(f"SAPI speak took {time.time() - speak_start:.2f}s")
+       Jarvis_Memory.write_to_memory(user_input, response)
 
 """
 Args: takes in history as what user types in input  
 Returns: outputs the user's response
 """
-def get_jarvis_response( history):
+def get_jarvis_response(history):
   with open("jarvis_personality.txt") as f:
      system_prompt = f.read()
   load_dotenv()
