@@ -1,9 +1,9 @@
 def write_to_memory(user_text, jarvis_text):
-    path = r"C:\Users\kitan\Documents\Obsidian Vault\jarvis_memory\Test.md"
+    path = r"C:\Users\kitan\Documents\Obsidian Vault\jarvis_memory\Jarvis_Chat.md"
     with open(path, "a", encoding="utf-8") as f:
         f.write(f"\nEngineer Bassam:   {user_text}\nJarvis_Response:   {jarvis_text}")
 def read_to_memory():
-    path = r"C:\Users\kitan\Documents\Obsidian Vault\jarvis_memory\Test.md"
+    path = r"C:\Users\kitan\Documents\Obsidian Vault\jarvis_memory\Jarvis_Chat.md"
     with open(path, "r", encoding="utf-8") as f:
         chat_read = f.read()
     memory = text_to_dict(chat_read)
