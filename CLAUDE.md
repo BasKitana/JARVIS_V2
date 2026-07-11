@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Jarvis is Bassam's personal learning project: a personal AI assistant built incrementally across 6 milestones (text chat -> voice -> persistent memory -> vision -> PC control -> local LLM). The point of the project is for Bassam to grow as a Python developer, not to ship Jarvis quickly.
+Jarvis is Bassam's personal learning project: a personal AI assistant built incrementally across milestones (text chat -> voice -> persistent memory -> vision + PC control -> coding ability). The point of the project is for Bassam to grow as a Python developer, not to ship Jarvis quickly. Stays on Claude's API throughout — a local-LLM milestone was considered and explicitly dropped (2026-07-05): the only motivation was cost savings, and for a personal single-user assistant the API cost isn't a real problem worth the reliability hit and infra work of self-hosting.
 
-Milestones 1 (terminal text chat), 2 (voice, in/out both working), and 3 (persistent memory — closed as MVP: write + full-file read-back work; topic classification and index-based lookup deferred, see `teacher/MILESTONE3_PROGRESS.md`) are complete. Currently on Milestone 4 (vision).
+Milestones 1 (terminal text chat), 2 (voice, in/out both working), and 3 (persistent memory — closed as MVP: write + full-file read-back work; topic classification and index-based lookup deferred, see `teacher/MILESTONE3_PROGRESS.md`) are complete. Currently on Milestone 4 (vision + PC control, merged — see below). Coding ability is the planned milestone after that; whether Jarvis gets a frontend or stays background-only is an open decision to make once M4 is built.
 
 ### Current milestone progress doc — read this, not an old one
 
@@ -15,6 +15,18 @@ The live status doc is always `teacher/MILESTONE<N>.md` where N is the milestone
 Rollover convention: write progress into the current `MILESTONE<N>.md` as work happens. When milestone N is actually done, delete `teacher/MILESTONE<N>.md`, create `teacher/MILESTONE<N+1>.md` with a fresh Goal/Not-started writeup, and update the link and milestone number in this section so future sessions point at the new file.
 
 Mental model used throughout: "only the ends change, the brain stays the same" — `get_jarvis_response()` always just takes text and returns text; voice work only swaps how text gets in (input) and how it goes out (output).
+
+### Post-milestone backlog (do not start until the coding-ability milestone is done)
+
+Carried over from the older `jarvis` repo (BasKitana/jarvis), which had these working already. Not part of the current milestone plan — revisit only after coding ability ships:
+
+- ~~Model routing (Haiku/Opus/Sonnet split)~~ — moot now that local LLM is dropped; everything stays on the API model chosen per task
+- **Email integration** — read inbox, draft/send with confirmation, open links from mail (Gmail IMAP/SMTP)
+- **Music/media control** — Spotify playback, YouTube search/play, liked songs, next/pause
+- **Hand-off to Claude Code** — detect "engineer this" requests, sharpen into a prompt, launch Claude Code autonomously in a coding folder
+- **Self-healing / watchdog** — auto-restart on crash, boot auto-start, crash logging
+- **"Reload/restart yourself"** — hot-reload own code from a voice command
+- **Obsidian as the memory backend** — structured facts file + idea capture + generated plans, not just a flat chat log
 
 ## Operating mode for this repo: teach, don't build
 

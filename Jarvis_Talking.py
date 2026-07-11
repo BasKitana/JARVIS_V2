@@ -6,7 +6,7 @@ import win32com.client
 import speech_recognition as sr
 import whisper
 import Jarvis_Memory
-
+from jarvis_cmd import jarvis_command
 def main():
     recognizer = sr.Recognizer()
     mic = sr.Microphone()
@@ -26,7 +26,7 @@ def main():
       else:
        user_info = {"role": "user", "content": user_input}
        history.append(user_info)
-       response = get_jarvis_response(history)
+       response = get_jarvis_response(history, voice)
        jarvis_info = {"role": "assistant", "content": response}
        history.append(jarvis_info)
        print(user_input)
@@ -40,7 +40,7 @@ def main():
 Args: takes in history as what user types in input  
 Returns: outputs the user's response
 """
-def get_jarvis_response(history):
+def get_jarvis_response(history, voice):
   with open("jarvis_personality.txt") as f:
      system_prompt = f.read()
   load_dotenv()
@@ -52,6 +52,18 @@ def get_jarvis_response(history):
     max_tokens= 10000,
     messages= history
   )
+  for block in response.content:
+      if block.type == "text":
+          if block.text == "On it engineer.":
+              voice.Speak(block.text)
+              cmd_return = jarvis_command(history[-1])
+              history.append({"role": "user", "content": f"[Task result] {cmd_return['content']}"})
+              response = client.messages.create(
+                system= system_prompt,
+                model="claude-haiku-4-5",
+                max_tokens= 10000,
+                messages= history
+              )
   return response.content[0].text
 """
 args: takes in the mic and the recognizer 

@@ -26,6 +26,7 @@ def text_to_dict(chat_read):
             chat_history.append({"role": "assistant", "content": chat})
             
         else:
-            return
+            if chat_history:
+                chat_history[-1]["content"] += " " + chat
 
     return chat_history
