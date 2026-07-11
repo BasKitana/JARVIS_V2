@@ -7,6 +7,8 @@ import speech_recognition as sr
 import whisper
 import Jarvis_Memory
 from jarvis_cmd import jarvis_command
+
+
 def main():
     recognizer = sr.Recognizer()
     mic = sr.Microphone()
@@ -40,6 +42,18 @@ def main():
 Args: takes in history as what user types in input  
 Returns: outputs the user's response
 """
+DELEGATE_TASK_TOOL = {
+    "name": "delegate_task",
+    "description": "Use this whenever completing the request requires actually running a command, or creating, modifying, deleting, or moving files or folders on the system. Do not try to describe doing it yourself - delegate it. Give the task in plain natural language; the task-execution subsystem will figure out the exact commands.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "task": {"type": "string", "description": "A plain natural-language description of the task to perform."}
+        },
+        "required": ["task"]
+    }
+}
+
 def get_jarvis_response(history, voice):
   with open("jarvis_personality.txt") as f:
      system_prompt = f.read()
@@ -50,20 +64,32 @@ def get_jarvis_response(history, voice):
     system= system_prompt,
     model="claude-haiku-4-5",
     max_tokens= 10000,
+    tools= [DELEGATE_TASK_TOOL],
     messages= history
   )
+
+  tool_use_block = None
+  text_blocks = []
   for block in response.content:
       if block.type == "text":
-          if block.text == "On it engineer.":
-              voice.Speak(block.text)
-              cmd_return = jarvis_command(history[-1])
-              history.append({"role": "user", "content": f"[Task result] {cmd_return['content']}"})
-              response = client.messages.create(
-                system= system_prompt,
-                model="claude-haiku-4-5",
-                max_tokens= 10000,
-                messages= history
-              )
+          text_blocks.append(block)
+      elif block.type == "tool_use" and block.name == "delegate_task":
+          tool_use_block = block
+
+  if tool_use_block is not None:
+      for text_block in text_blocks:
+          voice.Speak(text_block.text)
+      task = tool_use_block.input["task"]
+      cmd_return = jarvis_command({"role": "user", "content": task})
+      history.append({"role": "user", "content": f"[Task result] {cmd_return['content']}"})
+      response = client.messages.create(
+        system= system_prompt,
+        model="claude-haiku-4-5",
+        max_tokens= 10000,
+        tools= [DELEGATE_TASK_TOOL],
+        messages= history
+      )
+
   return response.content[0].text
 """
 args: takes in the mic and the recognizer 
