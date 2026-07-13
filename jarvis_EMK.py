@@ -1,7 +1,12 @@
 import base64
+import io
 import os
+import time
 import anthropic
 from dotenv import load_dotenv
+import pyautogui
+import mss
+from PIL import Image
 
 
 # Real monitor layout, from System.Windows.Forms.Screen.AllScreens:
@@ -35,15 +40,25 @@ def jarvis_screen_action(user_command):
 
     messages = [user_command]
 
+    turn = 0
+    total_start = time.perf_counter()
     while True:
+        turn += 1
+        call_start = time.perf_counter()
         response = client.beta.messages.create(
             model="claude-sonnet-5",
             max_tokens=4096,
             system=system_prompt,
             tools=[COMPUTER_TOOL],
+            output_config={"effort": "low"},
+            cache_control={"type": "ephemeral"},  # cache the stable prefix (system, tools, prior turns) - re-sent images bill at ~10%
             betas=["computer-use-2025-11-24"],
             messages=messages,
         )
+        print(f"[TIMING] turn {turn}: Sonnet call {time.perf_counter() - call_start:.2f}s "
+              f"(in={response.usage.input_tokens} out={response.usage.output_tokens} "
+              f"cache_read={response.usage.cache_read_input_tokens} "
+              f"cache_write={response.usage.cache_creation_input_tokens})")
         messages.append({"role": "assistant", "content": response.content})
 
         tool_use_block = None
@@ -55,7 +70,10 @@ def jarvis_screen_action(user_command):
                 text_block = block
 
         if tool_use_block is not None:
+            action_start = time.perf_counter()
             result_content = handle_computer_action(tool_use_block.input)
+            print(f"[TIMING] turn {turn}: action {tool_use_block.input.get('action')!r} "
+                  f"took {time.perf_counter() - action_start:.2f}s")
             messages.append({
                 "role": "user",
                 "content": [{
@@ -64,8 +82,29 @@ def jarvis_screen_action(user_command):
                     "content": result_content,
                 }]
             })
+            prune_old_screenshots(messages)
         elif text_block is not None:
+            print(f"[TIMING] jarvis_screen_action total: {time.perf_counter() - total_start:.2f}s "
+                  f"over {turn} Sonnet call(s)")
             return {"role": "assistant", "content": text_block.text}
+
+
+def prune_old_screenshots(messages):
+    """Blank out every screenshot image except the two most recent, so stale
+    screens aren't re-sent (and re-billed) on every turn. Claude can always take
+    a fresh screenshot when it needs to see the screen again."""
+    image_turns = [i for i, m in enumerate(messages) if _has_screenshot(m)]
+    for i in image_turns[:-1]:
+        messages[i]["content"][0]["content"] = "[earlier screenshot removed to save tokens]"
+
+
+def _has_screenshot(message):
+    if message.get("role") != "user" or not isinstance(message.get("content"), list):
+        return False
+    inner = message["content"][0].get("content")
+    return isinstance(inner, list) and any(
+        isinstance(c, dict) and c.get("type") == "image" for c in inner
+    )
 
 
 def handle_computer_action(input):
@@ -116,71 +155,121 @@ def handle_computer_action(input):
     return f"unhandled action: {action}"
 
 
+
 def take_screenshot():
-    """
-    TODO: capture the screen and return raw PNG bytes.
-    Pick a library first (mss, pyautogui, pillow's ImageGrab, etc.) - none chosen yet.
-    """
-    raise NotImplementedError
+    with mss.mss() as sct:
+        monitor = {
+            "left": VIRTUAL_SCREEN_ORIGIN_X,
+            "top": VIRTUAL_SCREEN_ORIGIN_Y,
+            "width": VIRTUAL_SCREEN_WIDTH,
+            "height": VIRTUAL_SCREEN_HEIGHT,
+        }
+        sct_img = sct.grab(monitor)
+
+    # Downscale the full-size grab to the exact dims we declared in COMPUTER_TOOL,
+    # so the image we send matches what the model expects (its click coordinates
+    # only line up if the two agree), and the PNG is smaller/faster to send.
+    image = Image.frombytes("RGB", sct_img.size, sct_img.rgb)
+    image = image.resize(
+        (COMPUTER_TOOL["display_width_px"], COMPUTER_TOOL["display_height_px"])
+    )
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+
+def to_real_coords(x, y):
+    real_x = x / SCALE + VIRTUAL_SCREEN_ORIGIN_X
+    real_y = y / SCALE + VIRTUAL_SCREEN_ORIGIN_Y
+    return real_x, real_y
+
 
 def click_at(x, y):
-    """
-    TODO: move the mouse to (x, y) and left-click.
-    """
-    raise NotImplementedError
+    real_x, real_y = to_real_coords(x, y)
+    pyautogui.moveTo(real_x, real_y)
+    pyautogui.click()
+
 
 def type_text(text):
     """
     TODO: send keystrokes for `text`.
     """
-    raise NotImplementedError
+    pyautogui.write(text)
+
 
 def press_key(key_combo):
     """
     TODO: press a key or key combination, e.g. "ctrl+s".
     """
-    raise NotImplementedError
+    pyautogui.hotkey(*key_combo.split('+'))
+    
 
 def scroll_at(x, y, direction, amount):
-    """
-    TODO: scroll at (x, y) in `direction` ("up"/"down"/"left"/"right") by `amount`.
-    """
-    raise NotImplementedError
+    real_x, real_y = to_real_coords(x, y)
+    pyautogui.moveTo(real_x, real_y)
+    if direction == "up":
+        pyautogui.scroll(amount)
+    elif direction == "down":
+        pyautogui.scroll(-amount)
+    elif direction == "right":
+        pyautogui.hscroll(amount)
+    elif direction == "left":
+        pyautogui.hscroll(-amount)
 
 def right_click_at(x, y):
-    """
-    TODO: move the mouse to (x, y) and right-click.
-    """
-    raise NotImplementedError
+    real_x, real_y = to_real_coords(x, y)
+    pyautogui.moveTo(real_x, real_y)
+    pyautogui.rightClick()
+
 
 def double_click_at(x, y):
-    """
-    TODO: move the mouse to (x, y) and double-click.
-    """
-    raise NotImplementedError
+    real_x, real_y = to_real_coords(x, y)
+    pyautogui.moveTo(real_x, real_y)
+    pyautogui.doubleClick()
+
 
 def move_mouse_to(x, y):
-    """
-    TODO: move the mouse cursor to (x, y) without clicking.
-    """
-    raise NotImplementedError
+    real_x, real_y = to_real_coords(x, y)
+    pyautogui.moveTo(real_x, real_y)
 
 def hold_key(key_combo, duration):
     """
     TODO: hold `key_combo` down for `duration` seconds.
     """
-    raise NotImplementedError
+    pyautogui.keyDown(key_combo)
+    pyautogui.sleep(duration)
+    pyautogui.keyUp(key_combo)
+    
 
 def wait(duration):
     """
     TODO: pause for `duration` seconds before the next action.
     """
-    raise NotImplementedError
+    pyautogui.sleep(duration)           
+    
 
 def zoom_region(region):
-    """
-    TODO: crop the most recent screenshot to `region` ([x1, y1, x2, y2]) at full
-    resolution and return it the same way take_screenshot() does (a base64 image
-    tool_result block), so Claude can inspect small text/UI elements up close.
-    """
-    raise NotImplementedError
+    x1, y1, x2, y2 = region
+    # region coords are in the downscaled canvas Claude sees - convert back to
+    # real screen pixels before capturing, same math used for click coordinates.
+    real_x1 = x1 / SCALE + VIRTUAL_SCREEN_ORIGIN_X
+    real_y1 = y1 / SCALE + VIRTUAL_SCREEN_ORIGIN_Y
+    real_x2 = x2 / SCALE + VIRTUAL_SCREEN_ORIGIN_X
+    real_y2 = y2 / SCALE + VIRTUAL_SCREEN_ORIGIN_Y
+
+    with mss.mss() as sct:
+        monitor = {
+            "left": round(real_x1),
+            "top": round(real_y1),
+            "width": round(real_x2 - real_x1),
+            "height": round(real_y2 - real_y1),
+        }
+        sct_img = sct.grab(monitor)
+        png_bytes = mss.tools.to_png(sct_img.rgb, sct_img.size)
+
+    b64 = base64.standard_b64encode(png_bytes).decode("utf-8")
+    return [{
+        "type": "image",
+        "source": {"type": "base64", "media_type": "image/png", "data": b64}
+    }]

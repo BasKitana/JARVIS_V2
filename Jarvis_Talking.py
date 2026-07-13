@@ -7,6 +7,7 @@ import speech_recognition as sr
 import whisper
 import Jarvis_Memory
 from jarvis_cmd import jarvis_command
+from jarvis_EMK import jarvis_screen_action
 
 
 def main():
@@ -54,6 +55,18 @@ DELEGATE_TASK_TOOL = {
     }
 }
 
+DELEGATE_SCREEN_TOOL = {
+    "name": "delegate_screen_task",
+    "description": "Use this whenever completing the request requires actually seeing the screen, or clicking, typing, scrolling, or otherwise interacting with anything visible on screen. Do not try to describe doing it yourself - delegate it. Give the task in plain natural language; the screen-vision subsystem will look at the screen and act.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "task": {"type": "string", "description": "A plain natural-language description of what to look at and/or do on screen."}
+        },
+        "required": ["task"]
+    }
+}
+
 def get_jarvis_response(history, voice):
   with open("jarvis_personality.txt") as f:
      system_prompt = f.read()
@@ -64,7 +77,8 @@ def get_jarvis_response(history, voice):
     system= system_prompt,
     model="claude-haiku-4-5",
     max_tokens= 10000,
-    tools= [DELEGATE_TASK_TOOL],
+    tools= [DELEGATE_TASK_TOOL, DELEGATE_SCREEN_TOOL],
+    cache_control= {"type": "ephemeral"},  # caches the replayed history/prefix once it grows past the min cacheable size
     messages= history
   )
 
@@ -73,20 +87,26 @@ def get_jarvis_response(history, voice):
   for block in response.content:
       if block.type == "text":
           text_blocks.append(block)
-      elif block.type == "tool_use" and block.name == "delegate_task":
+      elif block.type == "tool_use" and block.name in ("delegate_task", "delegate_screen_task"):
           tool_use_block = block
 
   if tool_use_block is not None:
       for text_block in text_blocks:
           voice.Speak(text_block.text)
       task = tool_use_block.input["task"]
-      cmd_return = jarvis_command({"role": "user", "content": task})
+      if tool_use_block.name == "delegate_task":
+          cmd_return = jarvis_command({"role": "user", "content": task})
+      elif tool_use_block.name == "delegate_screen_task":
+          cmd_return = jarvis_screen_action({"role": "user", "content": task})
+      else:
+          raise ValueError(f"unexpected tool_use name: {tool_use_block.name!r}")
       history.append({"role": "user", "content": f"[Task result] {cmd_return['content']}"})
       response = client.messages.create(
         system= system_prompt,
         model="claude-haiku-4-5",
         max_tokens= 10000,
-        tools= [DELEGATE_TASK_TOOL],
+        tools= [DELEGATE_TASK_TOOL, DELEGATE_SCREEN_TOOL],
+        cache_control= {"type": "ephemeral"},  # caches the replayed history/prefix once it grows past the min cacheable size
         messages= history
       )
 
