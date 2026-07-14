@@ -21,7 +21,8 @@ def main():
       print("Threshold after:", recognizer.energy_threshold)
     recognizer.dynamic_energy_threshold = False
     recognizer.energy_threshold += 50
-    history = Jarvis_Memory.read_to_memory()
+    voice.speak("Host verified. Welcome back, Engineer. Jarvis is fully online.")
+    history = []
     while True:
       user_input = listener(recognizer, mic, whisper_model)
       if user_input.strip() == "":
@@ -38,6 +39,7 @@ def main():
        voice.Speak(response)
        print(f"SAPI speak took {time.time() - speak_start:.2f}s")
        Jarvis_Memory.write_to_memory(user_input, response)
+       Jarvis_Memory.memory_clerk()
 
 """
 Args: takes in history as what user types in input  
@@ -69,8 +71,10 @@ DELEGATE_SCREEN_TOOL = {
 
 def get_jarvis_response(history, voice):
   with open("jarvis_personality.txt") as f:
-     system_prompt = f.read()
+     system_prompt = f.read() 
   load_dotenv()
+  import_mind = Jarvis_Memory.clean_memory()
+  system_prompt = f"{system_prompt}\n\n{import_mind}"
   api_key = os.environ["ANTHROPIC_API_KEY"]
   client = anthropic.Anthropic(api_key= api_key)
   response = client.messages.create(

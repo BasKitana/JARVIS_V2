@@ -94,7 +94,7 @@ def prune_old_screenshots(messages):
     screens aren't re-sent (and re-billed) on every turn. Claude can always take
     a fresh screenshot when it needs to see the screen again."""
     image_turns = [i for i, m in enumerate(messages) if _has_screenshot(m)]
-    for i in image_turns[:-1]:
+    for i in image_turns[:-2]:
         messages[i]["content"][0]["content"] = "[earlier screenshot removed to save tokens]"
 
 
