@@ -32,7 +32,7 @@ RUN_COMMAND_TOOL = {
     }
 }
 def jarvis_command(user_command):
-    with open("Jarvis_Tasking.txt") as f:
+    with open("system_prompts/jarvis_tasking.txt") as f:
         system_prompt = f.read()
     load_dotenv()
     api_key = os.environ["ANTHROPIC_API_KEY"]
@@ -42,10 +42,11 @@ def jarvis_command(user_command):
 
     while True:
      response = client.messages.create(
-        model="claude-sonnet-5",
+        model="claude-sonnet-4-6",
         max_tokens=10000,
         system=system_prompt,
         tools = [RUN_COMMAND_TOOL],
+        output_config={"effort": "low"},
         messages=messages
         )
      messages.append({"role": "assistant", "content": response.content})

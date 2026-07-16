@@ -6,6 +6,7 @@ import win32com.client
 import speech_recognition as sr
 import whisper
 import Jarvis_Memory
+from Jarvis_media import jarvis_media
 from jarvis_cmd import jarvis_command
 from jarvis_EMK import jarvis_screen_action
 
@@ -45,6 +46,18 @@ def main():
 Args: takes in history as what user types in input  
 Returns: outputs the user's response
 """
+MEDIA_CONTROL_TOOL = {
+    "name": "media_control",
+    "description": "Use this whenever the request is about music/video playback - playing a song, artist, or playlist, liked songs, pausing/resuming, skipping to the next or previous track, or searching/playing something on YouTube. Do not try to describe doing it yourself - delegate it. Give the task in plain natural language; the media subsystem will figure out whether it's Spotify or YouTube and what specifically to do.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "task": {"type": "string", "description": "A plain natural-language description of the media action to perform."}
+        },
+        "required": ["task"]
+    }
+}
+
 DELEGATE_TASK_TOOL = {
     "name": "delegate_task",
     "description": "Use this whenever completing the request requires actually running a command, or creating, modifying, deleting, or moving files or folders on the system. Do not try to describe doing it yourself - delegate it. Give the task in plain natural language; the task-execution subsystem will figure out the exact commands.",
@@ -70,51 +83,58 @@ DELEGATE_SCREEN_TOOL = {
 }
 
 def get_jarvis_response(history, voice):
-  with open("jarvis_personality.txt") as f:
-     system_prompt = f.read() 
+  with open("system_prompts/jarvis_personality.txt") as f:
+     system_prompt = f.read()
   load_dotenv()
   import_mind = Jarvis_Memory.clean_memory()
   system_prompt = f"{system_prompt}\n\n{import_mind}"
   api_key = os.environ["ANTHROPIC_API_KEY"]
   client = anthropic.Anthropic(api_key= api_key)
-  response = client.messages.create(
-    system= system_prompt,
-    model="claude-haiku-4-5",
-    max_tokens= 10000,
-    tools= [DELEGATE_TASK_TOOL, DELEGATE_SCREEN_TOOL],
-    cache_control= {"type": "ephemeral"},  # caches the replayed history/prefix once it grows past the min cacheable size
-    messages= history
-  )
 
-  tool_use_block = None
-  text_blocks = []
-  for block in response.content:
-      if block.type == "text":
-          text_blocks.append(block)
-      elif block.type == "tool_use" and block.name in ("delegate_task", "delegate_screen_task"):
-          tool_use_block = block
+  while True:
+    response = client.messages.create(
+      system= system_prompt,
+      model="claude-haiku-4-5",
+      max_tokens= 10000,
+      tools= [DELEGATE_TASK_TOOL, DELEGATE_SCREEN_TOOL, MEDIA_CONTROL_TOOL],
+      cache_control= {"type": "ephemeral"},  # caches the replayed history/prefix once it grows past the min cacheable size
+      messages= history
+    )
 
-  if tool_use_block is not None:
-      for text_block in text_blocks:
-          voice.Speak(text_block.text)
-      task = tool_use_block.input["task"]
-      if tool_use_block.name == "delegate_task":
-          cmd_return = jarvis_command({"role": "user", "content": task})
-      elif tool_use_block.name == "delegate_screen_task":
-          cmd_return = jarvis_screen_action({"role": "user", "content": task})
-      else:
-          raise ValueError(f"unexpected tool_use name: {tool_use_block.name!r}")
-      history.append({"role": "user", "content": f"[Task result] {cmd_return['content']}"})
-      response = client.messages.create(
-        system= system_prompt,
-        model="claude-haiku-4-5",
-        max_tokens= 10000,
-        tools= [DELEGATE_TASK_TOOL, DELEGATE_SCREEN_TOOL],
-        cache_control= {"type": "ephemeral"},  # caches the replayed history/prefix once it grows past the min cacheable size
-        messages= history
-      )
+    tool_use_block = None
+    text_blocks = []
+    for block in response.content:
+        if block.type == "text":
+            text_blocks.append(block)
+        elif block.type == "tool_use" and block.name in ("delegate_task", "delegate_screen_task", "media_control"):
+            tool_use_block = block
 
-  return response.content[0].text
+    if tool_use_block is None:
+        return response.content[0].text
+
+    for text_block in text_blocks:
+        voice.Speak(text_block.text)
+
+    history.append({"role": "assistant", "content": response.content})
+
+    task = tool_use_block.input["task"]
+    if tool_use_block.name == "delegate_task":
+        cmd_return = jarvis_command({"role": "user", "content": task})
+    elif tool_use_block.name == "delegate_screen_task":
+        cmd_return = jarvis_screen_action({"role": "user", "content": task})
+    elif tool_use_block.name == "media_control":
+        cmd_return = jarvis_media({"role": "user", "content": task})
+    else:
+        raise ValueError(f"unexpected tool_use name: {tool_use_block.name!r}")
+
+    history.append({
+        "role": "user",
+        "content": [{
+            "type": "tool_result",
+            "tool_use_id": tool_use_block.id,
+            "content": cmd_return['content']
+        }]
+    })
 """
 args: takes in the mic and the recognizer 
 returns the users input

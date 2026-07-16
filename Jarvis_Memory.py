@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 def write_to_memory(user_text, jarvis_text):
     path = r"C:\Users\kitan\Documents\Obsidian Vault\jarvis_memory\Jarvis_Chat.md"
     with open(path, "a", encoding="utf-8") as f:
-        f.write(f"\nEngineer Bassam:   {user_text}\nJarvis_Response:   {jarvis_text}")
+        f.write(f"\nEngineer:   {user_text}\nJarvis_Response:   {jarvis_text}")
 def read_to_memory():
     path = r"C:\Users\kitan\Documents\Obsidian Vault\jarvis_memory\Jarvis_Chat.md"
     with open(path, "r", encoding="utf-8") as f:
@@ -22,8 +22,8 @@ def text_to_dict(chat_read):
         chat = line.strip()
         if not chat:
             continue
-        if chat.startswith("Engineer Bassam:"):
-            chat = chat.removeprefix("Engineer Bassam:")
+        if chat.startswith("Engineer:"):
+            chat = chat.removeprefix("Engineer:")
             chat = chat.strip()
             chat_history.append({"role": "user", "content": chat})        
         elif chat.startswith("Jarvis_Response:"):
@@ -40,7 +40,7 @@ def text_to_dict(chat_read):
 
 def memory_clerk():
     dirty_memory = read_to_memory()
-    with open("clerk_prompt.txt", "r") as f:
+    with open("system_prompts/clerk_prompt.txt", "r") as f:
         clerk_prompt = f.read()
         user_command = f"Here is the raw chat history. Please process and clean this memory according to your system instructions:\n\n{dirty_memory}"
     load_dotenv()
@@ -52,6 +52,9 @@ def memory_clerk():
     max_tokens= 7000,
     messages= [{"role": "user", "content": user_command}]
   )
+    if not response.content:
+        print(f"[memory_clerk] empty response content, stop_reason={response.stop_reason!r} - skipping this cycle, chat log left intact")
+        return
     clean_memory = response.content[0].text
     path = r"C:\Users\kitan\Documents\Obsidian Vault\jarvis_memory\Jarvis_Mind.md"
     with open(path, "a", encoding="utf-8") as f:

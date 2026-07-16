@@ -132,3 +132,53 @@ structure, plus two things specific to this milestone:
 `take_screenshot()` first — nothing else in the loop is testable until Jarvis can actually see the
 screen. Kill switch still not built; still a hard requirement before any of this runs against the
 real desktop per the locked decision above.
+
+## Interim detour: Spotify control (started 2026-07-15, working end-to-end same day)
+Bassam pulled this forward from the post-milestone backlog in the root `CLAUDE.md` — was originally
+slotted for after the coding-ability milestone, built immediately instead, in parallel with M5's
+screen control. M5's own work above (kill switch, `take_screenshot()`) was unblocked and
+independent of this the whole time — still the next thing to pick up.
+
+**Goal:** Jarvis can control Spotify playback by voice — play/pause, skip, search-and-play a
+track/artist/playlist, liked songs, report what playlists exist. Also handles YouTube
+search/play/open, no auth needed for that half. **Done, tested working.**
+
+**Design decision — no LLM inside the media arm, unlike `jarvis_cmd`/`jarvis_EMK`.** Originally
+planned as a `jarvis_cmd.py`-style sub-loop (its own Sonnet call, its own tool schema for
+play/pause/search). Reversed once Bassam pointed out Spotify/YouTube actions are a small,
+deterministic action set — not open-ended like a shell command or screen interaction — so a second
+model call would just be unnecessary cost/latency. `Jarvis_media.py` is plain Python: Haiku
+recognizes "this is a media request" and forwards the raw task text via the `media_control` tool;
+`jarvis_media()` decides Spotify vs YouTube and calls a regex/keyword dispatcher directly, no
+reasoning step in between.
+
+**What got reused vs. rebuilt:** the older `jarvis` repo (`BasKitana/jarvis`, GitHub) already had
+working Spotify + YouTube control — found via `gh api`/`gh` code search once Bassam confirmed he
+was pointing at that repo, not `command_tool`. The `_spotify_*` httpx helper functions (token
+refresh, device discovery/wake, retry-on-404/5xx) and the `handle_spotify`/`youtube_action`
+regex dispatch logic were ported close to verbatim — proven code, not worth rewriting. What's new is
+only the `jarvis_media()` entry point that ties that old logic into the tool-use architecture.
+
+**Credentials:** old repo's `SPOTIFY_CLIENT_ID`/`SECRET`/`REFRESH_TOKEN` weren't available anymore
+(different machine/project), so these were regenerated from scratch — registered a fresh app at
+developer.spotify.com/dashboard, then a one-time `spotify_authorize_once.py` script (written,
+run once to mint the refresh token, then deleted per its own instructions) drove the OAuth
+Authorization Code flow: open the approval URL, paste back the `127.0.0.1:8888/callback?code=...`
+redirect URL, exchange for a refresh token via `accounts.spotify.com/api/token`. All four values
+(`SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`, `SPOTIFY_REDIRECT_URI`, `SPOTIFY_REFRESH_TOKEN`)
+are now in `.env`, verified present via a throwaway presence-check script (values never echoed).
+Scopes used: `user-modify-playback-state`, `user-read-playback-state`,
+`user-read-currently-playing`, `user-library-read`, `playlist-read-private`.
+
+**Wired into `Jarvis.py`:** `MEDIA_CONTROL_TOOL` added alongside `DELEGATE_TASK_TOOL`/
+`DELEGATE_SCREEN_TOOL`; dispatch branch calls `jarvis_media()` (imported via
+`from Jarvis_media import jarvis_media`). `system_prompts/jarvis_personality.txt` updated to
+describe all three tools, including the "Spotify/YouTube always goes to `media_control`, even a
+bare 'open Spotify'" carve-out, since the media subsystem's `_spotify_ensure_device()` already
+handles launching the app if nothing's active.
+
+**Open questions still unresolved:** "control" is Spotify-Connect-device playback only (the Web
+API can't touch an arbitrary local player state that isn't Spotify-Connect-visible); which device
+gets targeted when multiple are active is whatever `_spotify_device()`'s heuristic picks (first
+`is_active`, else the first device in the list) — untested with genuinely multiple simultaneous
+devices.

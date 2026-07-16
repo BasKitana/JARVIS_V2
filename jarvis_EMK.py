@@ -32,7 +32,7 @@ COMPUTER_TOOL = {
 }
 
 def jarvis_screen_action(user_command):
-    with open("jarvis_screen_personality.txt") as f:
+    with open("system_prompts/jarvis_screen_personality.txt") as f:
         system_prompt = f.read()
     load_dotenv()
     api_key = os.environ["ANTHROPIC_API_KEY"]
@@ -46,7 +46,7 @@ def jarvis_screen_action(user_command):
         turn += 1
         call_start = time.perf_counter()
         response = client.beta.messages.create(
-            model="claude-sonnet-5",
+            model="claude-sonnet-4-6",
             max_tokens=4096,
             system=system_prompt,
             tools=[COMPUTER_TOOL],
