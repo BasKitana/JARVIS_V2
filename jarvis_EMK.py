@@ -156,7 +156,11 @@ def handle_computer_action(input):
 
 
 
+_last_raw_screenshot = None  # full-res PIL Image from the most recent take_screenshot(), so zoom crops it instead of re-grabbing a live (possibly different) screen
+
+
 def take_screenshot():
+    global _last_raw_screenshot
     with mss.mss() as sct:
         monitor = {
             "left": VIRTUAL_SCREEN_ORIGIN_X,
@@ -166,15 +170,17 @@ def take_screenshot():
         }
         sct_img = sct.grab(monitor)
 
+    image = Image.frombytes("RGB", sct_img.size, sct_img.rgb)
+    _last_raw_screenshot = image
+
     # Downscale the full-size grab to the exact dims we declared in COMPUTER_TOOL,
     # so the image we send matches what the model expects (its click coordinates
     # only line up if the two agree), and the PNG is smaller/faster to send.
-    image = Image.frombytes("RGB", sct_img.size, sct_img.rgb)
-    image = image.resize(
+    resized = image.resize(
         (COMPUTER_TOOL["display_width_px"], COMPUTER_TOOL["display_height_px"])
     )
     buffer = io.BytesIO()
-    image.save(buffer, format="PNG")
+    resized.save(buffer, format="PNG")
     return buffer.getvalue()
 
 
@@ -250,25 +256,24 @@ def wait(duration):
     
 
 def zoom_region(region):
+    global _last_raw_screenshot
+    if _last_raw_screenshot is None:
+        take_screenshot()  # zoom called before any screenshot exists - grab one to crop from
+
     x1, y1, x2, y2 = region
     # region coords are in the downscaled canvas Claude sees - convert back to
-    # real screen pixels before capturing, same math used for click coordinates.
-    real_x1 = x1 / SCALE + VIRTUAL_SCREEN_ORIGIN_X
-    real_y1 = y1 / SCALE + VIRTUAL_SCREEN_ORIGIN_Y
-    real_x2 = x2 / SCALE + VIRTUAL_SCREEN_ORIGIN_X
-    real_y2 = y2 / SCALE + VIRTUAL_SCREEN_ORIGIN_Y
+    # real-screenshot pixels, same math used for click coordinates, then crop
+    # the cached screenshot instead of re-grabbing the live screen (which may
+    # have changed since Claude looked at it, e.g. the mouse moving).
+    real_x1 = round(x1 / SCALE)
+    real_y1 = round(y1 / SCALE)
+    real_x2 = round(x2 / SCALE)
+    real_y2 = round(y2 / SCALE)
 
-    with mss.mss() as sct:
-        monitor = {
-            "left": round(real_x1),
-            "top": round(real_y1),
-            "width": round(real_x2 - real_x1),
-            "height": round(real_y2 - real_y1),
-        }
-        sct_img = sct.grab(monitor)
-        png_bytes = mss.tools.to_png(sct_img.rgb, sct_img.size)
-
-    b64 = base64.standard_b64encode(png_bytes).decode("utf-8")
+    crop = _last_raw_screenshot.crop((real_x1, real_y1, real_x2, real_y2))
+    buffer = io.BytesIO()
+    crop.save(buffer, format="PNG")
+    b64 = base64.standard_b64encode(buffer.getvalue()).decode("utf-8")
     return [{
         "type": "image",
         "source": {"type": "base64", "media_type": "image/png", "data": b64}

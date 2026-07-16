@@ -34,15 +34,19 @@ Claude can decide mid-conversation that it needs to see/act, rather than the cod
   `write_to_memory` — no new memory-writing logic needed beyond whatever M4 already introduces.
 - **Safety flag (Bassam's explicit call, one warning given and respected):** giving Jarvis real
   mouse/keyboard control on the actual desktop has real blast radius (misclick/mistype doing
-  something unintended). Bassam wants full click+type capability anyway. This is exactly why the
-  kill switch below is a hard requirement before this milestone runs against the real desktop,
-  not an optional nice-to-have like the M4 shell tool's "trust the model" stance.
+  something unintended). Bassam wants full click+type capability anyway. This originally made a
+  kill switch (see below) a hard requirement before this milestone could run against the real
+  desktop. **REVISED 2026-07-15 — kill switch dropped entirely, Bassam's call.** In its place:
+  a "WHEN TO STOP AND ASK" rule in `jarvis_screen_personality.txt` (see below) — a judgment-call
+  guardrail, not a hard-coded action list, that has Sonnet pause and ask before anything
+  destructive/irreversible/private instead of a panic-button process kill.
 
-## Carried over from Milestone 3 (deferred, see teacher/MILESTONE3_PROGRESS.md)
-- Memory classification (topic sorting — the "Obsidian clerk" idea, as a plain function first,
-  agent later only if lag demands it).
-- Index-based smart lookup to replace full-file replay (memory file currently grows unbounded
-  and is fully loaded into context every run — will degrade as it grows).
+## Carried over from Milestone 3 — both now CLOSED (2026-07-15), kept for history
+- ~~Memory classification (topic sorting — the "Obsidian clerk" idea)~~ — effectively shipped:
+  `memory_clerk()` is that clerk, built as a Haiku call rather than a plain function.
+- ~~Index-based smart lookup to replace full-file replay~~ — closed by the scope cut below, and
+  the underlying concern (memory file growing unbounded and fully replayed every run) no longer
+  holds: the clerk distills to `Jarvis_Mind.md` and clears `Jarvis_Chat.md` each turn.
 
 ## Tool-use loop design (locked 2026-07-05, cap dropped 2026-07-10)
 Claude's `content` list per response can hold multiple blocks at once (text + tool_use together)
@@ -65,12 +69,12 @@ with no counter, and `jarvis_screen_personality.txt` has no operation-limit lang
 This is a while-loop, not a fixed sequence — a given request might take 1 tool call or 8; the
 code doesn't know or assume how many, it just keeps going until step 3.
 
-## Kill switch (locked 2026-07-05 — hard requirement before this milestone touches the real desktop)
-A global hotkey (tentatively ctrl+shift+s, exact key TBD) that hard-kills the whole Jarvis
-process — a panic button for "it's doing something wrong," not a graceful stop. Needs its own
-background thread/OS-level key hook, since the main loop is synchronous and blocks on the mic,
-the API call, and tool actions — a hotkey check inside the same loop wouldn't be watched while
-those are blocking.
+## Kill switch — DROPPED (2026-07-15, Bassam's call)
+Originally locked 2026-07-05 as a hard requirement before this milestone touches the real desktop:
+a global hotkey that hard-kills the whole Jarvis process, a panic button for "it's doing something
+wrong." Explicitly dropped instead of built. The per-action guardrail below (WHEN TO STOP AND ASK)
+covers the actual risk this was meant to catch — Sonnet stopping itself before anything dangerous
+rather than Bassam needing to kill the process after the fact.
 
 ## Resolved questions (confirmed 2026-07-10 against Anthropic's current docs)
 - **Tool version/beta header:** `computer_20251124`, requires `betas=["computer-use-2025-11-24"]`
@@ -87,13 +91,29 @@ those are blocking.
   that same scale factor and have the virtual-screen origin `(0, -534)` added back in to map to
   real screen pixels — this conversion is not implemented yet, only the constants are in place.
 
+## Resolved since 2026-07-10
+- **Screenshot library: `mss`**, as proposed — grabs the arbitrary two-monitor bounding box,
+  downscales with PIL to the exact dims declared in `COMPUTER_TOOL`. Combined with `pyautogui`
+  for mouse/keyboard actions. Both installed and wired in `jarvis_EMK.py`.
+- **All 11 action handlers are implemented** — `take_screenshot`, `click_at`, `type_text`,
+  `press_key`, `scroll_at`, `right_click_at`, `double_click_at`, `move_mouse_to`, `hold_key`,
+  `wait`, `zoom_region` all have real code paths now, not `NotImplementedError`. Coordinate
+  conversion (`to_real_coords`) between the downscaled image Sonnet sees and real screen pixels
+  is implemented and in use by every click/scroll/zoom handler.
+- **Per-action guardrails, two of them, both prompt-level (no new code needed):**
+  1. Shutdown/sleep/restart confirmation in `jarvis_personality.txt` (Haiku's layer) — these three
+     actions require Jarvis to ask and wait for an explicit yes on the next turn before delegating,
+     since Haiku's conversation history persists across turns and can track that confirmation.
+  2. "WHEN TO STOP AND ASK" in `jarvis_screen_personality.txt` (Sonnet's screen-loop layer) — a
+     judgment call, not a fixed list: before anything destructive/irreversible/private, Sonnet
+     stops, doesn't act, and makes its final response a question instead of a click. That question
+     flows back through Haiku same as any other report, and Bassam's next reply re-delegates with
+     the answer folded in. No pause/resume mechanism needed in the loop itself — it already returns
+     final text the moment Sonnet stops calling tools, which is exactly what this repurposes.
+
 ## Open questions (still unresolved)
-- Which screenshot/automation library — `mss` was proposed (grabs an arbitrary bounding box,
-  needed for the two-monitor combined capture; `pyautogui.screenshot()` only grabs the primary
-  monitor by default on Windows) but not yet chosen/installed.
-- Global hotkey listener library for the kill switch — still open.
-- Beyond the kill switch, no per-action guardrails (e.g. confirm-before-click) are designed yet —
-  revisit before this actually runs against the real desktop.
+- None specific to the screen-control mechanic itself — that half of M5 is done. Everything still
+  open is in "The four remaining tasks" section at the bottom of this file.
 
 ## Session 2026-07-10 — where this actually stands, read before continuing
 Two new files exist: `jarvis_EMK.py` (the loop + tool dispatch, Bassam renamed it from the
@@ -109,12 +129,8 @@ prompt for this loop).
 - `handle_computer_action(input)` dispatches on `input["action"]` for all 11 actions the tool can
   request (`screenshot`, `left_click`, `type`, `key`, `scroll`, `right_click`, `double_click`,
   `mouse_move`, `hold_key`, `wait`, `zoom`) to matching handler functions.
-- **Every single handler function is still `raise NotImplementedError`** — `take_screenshot`,
-  `click_at`, `type_text`, `press_key`, `scroll_at`, `right_click_at`, `double_click_at`,
-  `move_mouse_to`, `hold_key`, `wait`, `zoom_region`. Nothing about this can actually see or touch
-  the screen yet. Calling any of them crashes the loop (uncaught exception), which is an
-  intentional stopgap for now (fail loud during development) but needs revisiting before this
-  runs unattended.
+- **Update 2026-07-15: all handlers are implemented now** (see "Resolved since 2026-07-10" above) —
+  this session's note about `NotImplementedError` everywhere is history, not current state.
 
 **`jarvis_screen_personality.txt`:** identity/environment/workflow mirroring `Jarvis_Tasking.txt`'s
 structure, plus two things specific to this milestone:
@@ -128,10 +144,10 @@ structure, plus two things specific to this milestone:
   an "unhandled action" string) and to say so honestly rather than pretend an unavailable action
   worked — same lesson M4 learned the hard way, applied here before it could bite for real.
 
-**Next session:** pick a screenshot/automation library (`mss` proposed, not chosen) and implement
-`take_screenshot()` first — nothing else in the loop is testable until Jarvis can actually see the
-screen. Kill switch still not built; still a hard requirement before any of this runs against the
-real desktop per the locked decision above.
+**(Historical note — superseded):** this session's "next session" pointer said to pick a
+screenshot library and implement `take_screenshot()` first, with the kill switch still required
+before running against the real desktop. Both are resolved now — see "Resolved since 2026-07-10"
+above and the kill-switch section (dropped, not built).
 
 ## Interim detour: Spotify control (started 2026-07-15, working end-to-end same day)
 Bassam pulled this forward from the post-milestone backlog in the root `CLAUDE.md` — was originally
@@ -182,3 +198,82 @@ API can't touch an arbitrary local player state that isn't Spotify-Connect-visib
 gets targeted when multiple are active is whatever `_spotify_device()`'s heuristic picks (first
 `is_active`, else the first device in the list) — untested with genuinely multiple simultaneous
 devices.
+
+## Voice: SAPI -> Chatterbox -> edge-tts (2026-07-15)
+Original entry point was renamed `Jarvis_Talking.py` -> `Jarvis.py`; system prompts moved out of
+the repo root into `system_prompts/`. Both reflected below and in the main `CLAUDE.md`.
+
+**Tried Chatterbox Turbo (`ChatterboxTurboTTS`), zero-shot voice cloning off a reference clip
+pulled from a YouTube short via `yt-dlp`+`ffmpeg`.** Real, non-hypothetical bugs hit and fixed
+along the way, in case this model/library comes up again:
+- `norm_loudness()` multiplies the float32 waveform by a numpy-float64 gain scalar under NumPy 2,
+  upcasting the whole clip to float64 and crashing every float32 layer downstream. Fixed with a
+  small monkeypatch casting the output back to float32.
+- Installing the community `chatterbox-streaming` fork (for lower-latency streamed playback)
+  turned out to hard-pin incompatible numpy/librosa/transformers versions against `chatterbox-tts`,
+  and both packages ship a colliding top-level `chatterbox` module — installing one corrupts the
+  other's files on disk in a shared global environment (no venv on this project). Full
+  uninstall/purge/reinstall was needed to recover; **conclusion: `chatterbox-streaming` needs its
+  own dedicated venv to use at all, it cannot coexist with the base package globally.**
+- Real GPU-latency bug found and fixed separately: Chatterbox's per-token generation rate degraded
+  progressively over a long-running session (54 -> 19 tokens/sec, mel inference collapsing from
+  ~20 it/s to 4.77 *seconds* per item). Root cause was VRAM pressure, not the model — `nvidia-smi`
+  showed 7654/8188 MiB used on the RTX 4060, with Wallpaper Engine's continuous background
+  rendering as the main competing consumer. Closing it stabilized the rate for the rest of the
+  session.
+- Kokoro-82M was evaluated as a faster alternative (RTF ~0.03-0.5 depending on hardware) but its
+  built-in preset voices were rejected on quality grounds (tried `am_michael`, `am_puck` — both
+  rejected). Voice cloning for Kokoro exists only via a separate community wrapper (`KokoClone`),
+  not evaluated further once `edge-tts` was found.
+
+**Landed on `edge-tts`** — free, piggybacks on Microsoft Edge's own neural "Read Aloud" voices via
+an undocumented-but-widely-used API, no key, no paid tier, no GPU/VRAM involvement at all. Voice:
+`en-US-EricNeural`. This replaced Chatterbox entirely in `Jarvis.py` — the model loading, the
+reference clip, the norm_loudness monkeypatch, `numpy`/`sounddevice` are all gone. `speak(text)`
+is now: synthesize to a temp mp3 via `edge_tts.Communicate(...).save(...)` (async, wrapped in
+`asyncio.run`), play it blocking via `playsound` (pinned to `1.2.2` — newer versions fail to build
+on this setup), delete the temp file. Simpler than what it replaced, not just faster.
+
+## SCOPE CLOSED — M5 is the final milestone (2026-07-15, Bassam's call)
+There is no Milestone 6. Bassam cut the planned coding-ability milestone and the entire
+post-milestone backlog (email integration, Claude Code hand-off, self-healing/watchdog, Obsidian
+memory backend, graph-based memory, model routing) on 2026-07-15. The four tasks below are the
+only remaining work on Jarvis. When they're done, the project is done — do not roll over into a
+`MILESTONE6.md`, and do not re-propose anything from the cut list. Full record of what was cut and
+why: the "Scope is closed" section in the root `CLAUDE.md`.
+
+Two consequences worth noting explicitly:
+- The **graph-memory** idea (Bassam's, 2026-07-10) is cut and also largely obsolete — it targeted
+  unbounded flat-file replay growing context every run, which the `memory_clerk()`
+  distill-to-`Jarvis_Mind.md`-and-clear architecture already solves from another angle. This also
+  permanently closes M3's deferred "index-based smart lookup" item listed further up this file.
+- The **self-healing/watchdog** backlog item is cut, but task 4 below (restart on voice command) is
+  its near-cousin and stays in scope. Only the crash-triggered half is gone.
+
+## The four remaining tasks (all that's left on Jarvis)
+None of it is specific to vision/screen-control anymore.
+
+**Tasks 1 and 2 are one subsystem, not two.** Both are gates on the same question — "should what
+the mic hears right now count as input?" Barge-in gates on *Jarvis is currently speaking*; the
+hotkeys gate on *Bassam said no*. They share state and both require the same `listener()` rework.
+Design them together or the gate gets built twice.
+
+1. **Interrupt/barge-in** — talk over Jarvis mid-response and have it stop. Real code change needed
+   (not a prompt tweak) since `speak()` blocks the whole script on `playsound()` — no way to
+   interrupt a single-threaded blocking call. The harder problem underneath is not threading: for
+   barge-in to work the mic must be recording *while* audio is playing, which means Jarvis hears
+   his own voice through the speakers. That's the actual design problem to solve. Not started.
+2. **Mic-mute hotkeys** (added 2026-07-15) — hold `Ctrl+Win` to mute the mic for as long as it's
+   held, so Jarvis doesn't pick up dictation while Bassam uses WhisperFlow; `Shift+M` to toggle
+   mute on/off manually. Needs a global keyboard hook (works while Jarvis isn't focused) plus the
+   shared mic-gate state from task 1. Not started.
+3. **`memory_clerk()` backgrounding** — currently runs synchronously every turn in `Jarvis.py`,
+   adding a full extra Haiku API round-trip before the loop goes back to listening. Needs a
+   background thread, plus a real race condition needs solving first: `memory_clerk()` reads
+   `Jarvis_Chat.md` then truncates it after a slow API call — if backgrounded, a new turn's
+   `write_to_memory()` could append to the file mid-cleanup and get silently wiped when the clerk
+   call finishes and clears the file. Not started.
+4. **Reload/self-restart on voice command.** Not started.
+
+Suggested order (proposed 2026-07-15, not yet locked): 3 first (smallest, contained, and the only
+one with a live correctness bug), then 1+2 together as one mic-gating design, then 4.

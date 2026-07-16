@@ -4,30 +4,43 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Jarvis is Bassam's personal learning project: a personal AI assistant built incrementally across milestones (text chat -> voice -> persistent memory -> vision + PC control -> coding ability). The point of the project is for Bassam to grow as a Python developer, not to ship Jarvis quickly. Stays on Claude's API throughout — a local-LLM milestone was considered and explicitly dropped (2026-07-05): the only motivation was cost savings, and for a personal single-user assistant the API cost isn't a real problem worth the reliability hit and infra work of self-hosting.
+Jarvis is Bassam's personal learning project: a personal AI assistant built incrementally across milestones (text chat -> voice -> persistent memory -> filesystem/shell control -> vision + PC control). The point of the project is for Bassam to grow as a Python developer, not to ship Jarvis quickly. Stays on Claude's API throughout — a local-LLM milestone was considered and explicitly dropped (2026-07-05): the only motivation was cost savings, and for a personal single-user assistant the API cost isn't a real problem worth the reliability hit and infra work of self-hosting.
 
-Milestones 1 (terminal text chat), 2 (voice, in/out both working), 3 (persistent memory — closed as MVP: write + full-file read-back work; topic classification and index-based lookup deferred, see `teacher/MILESTONE3_PROGRESS.md`), and 4 (filesystem/shell control — closed 2026-07-10: Jarvis delegates real system tasks from the always-on Haiku conversation to a Sonnet 5 task executor via a `delegate_task` tool, which runs PowerShell commands through a `run_command`-style tool-use loop and reports the result back in Haiku's own voice) are complete. Currently on Milestone 5 (vision + PC control — this was M4's original scope before Bassam split filesystem/shell control out to be built first on 2026-07-06). Coding ability is the planned milestone after that; whether Jarvis gets a frontend or stays background-only is an open decision to make once M5 is built.
+Milestones 1 (terminal text chat), 2 (voice, in/out both working), 3 (persistent memory — closed as MVP: write + full-file read-back work; topic classification and index-based lookup deferred, see `teacher/MILESTONE3_PROGRESS.md`), and 4 (filesystem/shell control — closed 2026-07-10: Jarvis delegates real system tasks from the always-on Haiku conversation to a Sonnet 5 task executor via a `delegate_task` tool, which runs PowerShell commands through a `run_command`-style tool-use loop and reports the result back in Haiku's own voice) are complete. Currently on Milestone 5 (vision + PC control — this was M4's original scope before Bassam split filesystem/shell control out to be built first on 2026-07-06).
+
+### Scope is closed — M5 is the last milestone (Bassam's call, 2026-07-15)
+
+**Milestone 5 is the end of the project.** There is no Milestone 6. Bassam explicitly cut the planned coding-ability milestone and the entire post-milestone backlog on 2026-07-15. When M5's four remaining tasks are done, Jarvis is done.
+
+The four remaining tasks, and nothing else:
+
+1. **Interrupt / barge-in** — talk over Jarvis mid-response and have it stop speaking.
+2. **Mic-mute hotkeys** — hold `Ctrl+Win` to mute the mic while it's held (so Jarvis doesn't hear dictation into WhisperFlow), and `Shift+M` to toggle mute manually.
+3. **Background `memory_clerk()`** — move it off the turn's critical path onto a thread, and fix the read-then-clear race against `Jarvis_Chat.md` first.
+4. **Reload / self-restart on voice command.**
+
+See [teacher/MILESTONE5.md](teacher/MILESTONE5.md) for the design state of each.
+
+**Do not propose, plan, or start anything outside those four.** If a new idea comes up, it is out of scope unless Bassam explicitly reopens scope — say so plainly rather than folding it in. The rollover convention below does not apply at the end of M5: when M5 closes, the project closes; do not create a `MILESTONE6.md`.
+
+Cut on 2026-07-15, recorded so no future session re-proposes them:
+
+- **Coding ability** (was the planned M6) — cut. The "frontend vs. background-only" question that was tied to it is moot and also closed.
+- **Email integration** (Gmail IMAP/SMTP inbox read + draft/send) — cut.
+- **Hand-off to Claude Code** ("engineer this" detection, autonomous launch) — cut.
+- **Self-healing / watchdog** (crash auto-restart, boot auto-start, crash logging) — cut. Note task 4 above (restart on command) is a near-cousin of this and is still in scope; the crash-triggered half is not.
+- **Obsidian as the memory backend** (structured facts + idea capture + generated plans) — cut.
+- **Graph-based memory instead of flat-file replay** (Bassam's idea, 2026-07-10) — cut, and largely obsolete anyway: the problem it targeted was unbounded flat-file replay growing context every run, which the `memory_clerk()` distill-to-`Jarvis_Mind.md`-and-clear architecture already solves from a different angle. This also closes M3's deferred "index-based smart lookup" item for good.
+- **Model routing (Haiku/Opus/Sonnet split)** — was already moot once the local LLM was dropped; formally cut.
+- **Music/media control** — not cut, already built: pulled forward 2026-07-15 and shipped as an interim detour alongside M5 (`Jarvis_media.py`, `media_control` tool). See MILESTONE5.md's "Interim detour" section.
 
 ### Current milestone progress doc — read this, not an old one
 
 The live status doc is always `teacher/MILESTONE<N>.md` where N is the milestone in progress — right now that's [teacher/MILESTONE5.md](teacher/MILESTONE5.md). Read that file for the real state; treat it as the source of truth over any milestone narrative elsewhere (including this file). Completed milestones' progress docs (e.g. `teacher/MILESTONE2_PROGRESS.md`) are kept as history — don't open them for current status.
 
-Rollover convention: write progress into the current `MILESTONE<N>.md` as work happens. When milestone N is actually done, delete `teacher/MILESTONE<N>.md`, create `teacher/MILESTONE<N+1>.md` with a fresh Goal/Not-started writeup, and update the link and milestone number in this section so future sessions point at the new file.
+Rollover convention (historical — no longer applies): progress goes into the current `MILESTONE<N>.md` as work happens, and a finished milestone N used to roll over into a fresh `MILESTONE<N+1>.md`. M5 is the final milestone, so there is no next rollover — see "Scope is closed" below. Completed milestones' docs stay as history.
 
 Mental model used throughout: "only the ends change, the brain stays the same" — `get_jarvis_response()` always just takes text and returns text; voice work only swaps how text gets in (input) and how it goes out (output).
-
-### Post-milestone backlog (do not start until the coding-ability milestone is done)
-
-Carried over from the older `jarvis` repo (BasKitana/jarvis), which had these working already. Not part of the current milestone plan — revisit only after coding ability ships:
-
-- ~~Model routing (Haiku/Opus/Sonnet split)~~ — moot now that local LLM is dropped; everything stays on the API model chosen per task
-- **Email integration** — read inbox, draft/send with confirmation, open links from mail (Gmail IMAP/SMTP)
-- ~~Music/media control — Spotify playback, YouTube search/play, liked songs, next/pause~~ — pulled forward 2026-07-15 and built as an interim detour alongside M5 (`Jarvis_media.py`, `media_control` tool). See `teacher/MILESTONE5.md`'s "Interim detour: Spotify control" section for the current state.
-- **Hand-off to Claude Code** — detect "engineer this" requests, sharpen into a prompt, launch Claude Code autonomously in a coding folder
-- **Self-healing / watchdog** — auto-restart on crash, boot auto-start, crash logging
-- **"Reload/restart yourself"** — hot-reload own code from a voice command
-- **Obsidian as the memory backend** — structured facts file + idea capture + generated plans, not just a flat chat log
-- **Graph-based memory instead of flat-file replay** (Bassam's idea, 2026-07-10) — replace `Jarvis_Memory.py`'s full-file read-back with something closer to how `/graphify` handles code: extract entities/relationships from conversation history into an actual knowledge graph, then retrieve/traverse relevant nodes instead of dumping the whole file into context every run. Goal: less hallucination (grounded retrieval vs. blind replay) and no token bloat as memory grows. This absorbs/supersedes M3's deferred "index-based smart lookup" item above — same underlying problem, more ambitious solution. Bassam is open to adapting code/ideas from elsewhere (e.g. graphify's own approach) rather than building from scratch.
 
 ## Operating mode for this repo: teach, don't build
 

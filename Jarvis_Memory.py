@@ -40,9 +40,16 @@ def text_to_dict(chat_read):
 
 def memory_clerk():
     dirty_memory = read_to_memory()
+    existing_mind = clean_memory()
     with open("system_prompts/clerk_prompt.txt", "r") as f:
         clerk_prompt = f.read()
-        user_command = f"Here is the raw chat history. Please process and clean this memory according to your system instructions:\n\n{dirty_memory}"
+    user_command = (
+        f"EXISTING LONG-TERM MEMORY (Jarvis_Mind.md):\n\n{existing_mind}\n\n"
+        f"NEW RAW CHAT HISTORY SINCE LAST CLEANUP:\n\n{dirty_memory}\n\n"
+        f"Merge the new chat into the existing memory. Return the FULL rewritten "
+        f"memory: dedupe repeated facts, drop anything not worth keeping, and add "
+        f"only genuinely new long-term state. Follow your system instructions."
+    )
     load_dotenv()
     api_key = os.environ["ANTHROPIC_API_KEY"]
     client = anthropic.Anthropic(api_key= api_key)
@@ -55,10 +62,10 @@ def memory_clerk():
     if not response.content:
         print(f"[memory_clerk] empty response content, stop_reason={response.stop_reason!r} - skipping this cycle, chat log left intact")
         return
-    clean_memory = response.content[0].text
+    clean = response.content[0].text
     path = r"C:\Users\kitan\Documents\Obsidian Vault\jarvis_memory\Jarvis_Mind.md"
-    with open(path, "a", encoding="utf-8") as f:
-        f.write(f"\n{clean_memory}")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(clean)
     path = r"C:\Users\kitan\Documents\Obsidian Vault\jarvis_memory\Jarvis_Chat.md"
     with open(path, "w", encoding="utf-8") as f:
         f.write("")

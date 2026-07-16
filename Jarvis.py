@@ -1,8 +1,11 @@
 from dotenv import load_dotenv
 import os
 import time
+import asyncio
+import tempfile
+import edge_tts
+from playsound import playsound
 import anthropic
-import win32com.client
 import speech_recognition as sr
 import whisper
 import Jarvis_Memory
@@ -10,11 +13,23 @@ from Jarvis_media import jarvis_media
 from jarvis_cmd import jarvis_command
 from jarvis_EMK import jarvis_screen_action
 
+VOICE = "en-US-EricNeural"
+
+
+def speak(text):
+    with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
+        temp_path = f.name
+    async def _synth():
+        communicate = edge_tts.Communicate(text, voice=VOICE)
+        await communicate.save(temp_path)
+    asyncio.run(_synth())
+    playsound(temp_path)
+    os.remove(temp_path)
+
 
 def main():
     recognizer = sr.Recognizer()
     mic = sr.Microphone()
-    voice = win32com.client.Dispatch("SAPI.SpVoice")
     whisper_model = whisper.load_model("medium")
     with mic as source:
       print("Threshold before:", recognizer.energy_threshold)
@@ -22,7 +37,7 @@ def main():
       print("Threshold after:", recognizer.energy_threshold)
     recognizer.dynamic_energy_threshold = False
     recognizer.energy_threshold += 50
-    voice.speak("Host verified. Welcome back, Engineer. Jarvis is fully online.")
+    speak("Host verified. Welcome back, Engineer. Jarvis is fully online.")
     history = []
     while True:
       user_input = listener(recognizer, mic, whisper_model)
@@ -31,19 +46,19 @@ def main():
       else:
        user_info = {"role": "user", "content": user_input}
        history.append(user_info)
-       response = get_jarvis_response(history, voice)
+       response = get_jarvis_response(history)
        jarvis_info = {"role": "assistant", "content": response}
        history.append(jarvis_info)
        print(user_input)
        print(response)
        speak_start = time.time()
-       voice.Speak(response)
-       print(f"SAPI speak took {time.time() - speak_start:.2f}s")
+       speak(response)
+       print(f"TTS speak took {time.time() - speak_start:.2f}s")
        Jarvis_Memory.write_to_memory(user_input, response)
        Jarvis_Memory.memory_clerk()
 
 """
-Args: takes in history as what user types in input  
+Args: takes in history as what user types in input
 Returns: outputs the user's response
 """
 MEDIA_CONTROL_TOOL = {
@@ -82,7 +97,7 @@ DELEGATE_SCREEN_TOOL = {
     }
 }
 
-def get_jarvis_response(history, voice):
+def get_jarvis_response(history):
   with open("system_prompts/jarvis_personality.txt") as f:
      system_prompt = f.read()
   load_dotenv()
@@ -113,7 +128,7 @@ def get_jarvis_response(history, voice):
         return response.content[0].text
 
     for text_block in text_blocks:
-        voice.Speak(text_block.text)
+        speak(text_block.text)
 
     history.append({"role": "assistant", "content": response.content})
 
@@ -136,7 +151,7 @@ def get_jarvis_response(history, voice):
         }]
     })
 """
-args: takes in the mic and the recognizer 
+args: takes in the mic and the recognizer
 returns the users input
 """
 import tempfile
